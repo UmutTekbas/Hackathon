@@ -170,7 +170,6 @@ function attest(button, participant) {
     certificate.classList.add("earned");
     proofDuration.textContent = formatTime(elapsed);
     liveState.innerHTML = "<i></i> PROVEN";
-    window.setTimeout(() => certificate.scrollIntoView({ behavior: "smooth", block: "center" }), 450);
   }
 }
 
