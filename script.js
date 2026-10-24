@@ -67,7 +67,9 @@ function setPhase(nextPhase) {
   }
   if (phase === "ended") {
     window.clearInterval(intervalId);
+    intervalId = undefined;
     renderMoney();
+    actionButton.disabled = true;
     actionButton.hidden = true;
     attestPanel.hidden = false;
     liveState.innerHTML = "<i></i> SETTLED";
@@ -102,7 +104,10 @@ walletButton.addEventListener("click", () => {
 actionButton.addEventListener("click", () => {
   if (phase === "open") setPhase("funded");
   else if (phase === "funded") setPhase("active");
-  else if (phase === "active") setPhase("ended");
+  else if (phase === "active") {
+    actionButton.disabled = true;
+    setPhase("ended");
+  }
 });
 
 studentAttest.addEventListener("click", () => attest(studentAttest, "student"));

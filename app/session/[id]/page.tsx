@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatEther, parseEther, zeroAddress, type Hash } from "viem";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { Seal } from "@/components/icons";
-import { MONAD_EXPLORER } from "@/lib/chain";
+import { monadTestnet, MONAD_EXPLORER } from "@/lib/chain";
 import { isContractConfigured, proofStreamAbi, proofStreamAddress, statusLabel, type ProofSession } from "@/lib/contract";
 
 const ATTESTATION_TIMEOUT = 300;
@@ -36,16 +36,23 @@ export default function SessionPage() {
   const [depositAmount, setDepositAmount] = useState("2");
   const [hash, setHash] = useState<Hash>();
   const [action, setAction] = useState<Action>();
+  const [settlementRequestedAt, setSettlementRequestedAt] = useState<number>();
   const { writeContractAsync, isPending, error } = useWriteContract();
-  const receipt = useWaitForTransactionReceipt({ hash });
+  const receipt = useWaitForTransactionReceipt({
+    hash,
+    chainId: monadTestnet.id,
+    confirmations: 1,
+    timeout: 45_000,
+    query: { enabled: Boolean(hash), retry: false }
+  });
   const { data, isLoading, isError, refetch } = useReadContract({
-    address: proofStreamAddress, abi: proofStreamAbi, functionName: "getSession", args: [sessionId],
+    address: proofStreamAddress, abi: proofStreamAbi, functionName: "getSession", args: [sessionId], chainId: monadTestnet.id,
     query: { enabled: isContractConfigured, refetchInterval: 2_000 }
   });
   const session = data as ProofSession | undefined;
   const { data: reputation, refetch: refetchReputation } = useReadContract({
     address: proofStreamAddress, abi: proofStreamAbi, functionName: "tutorReputation",
-    args: [session?.tutor ?? zeroAddress],
+    args: [session?.tutor ?? zeroAddress], chainId: monadTestnet.id,
     query: { enabled: Boolean(isContractConfigured && session), refetchInterval: 3_000 }
   });
 
@@ -54,13 +61,16 @@ export default function SessionPage() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (receipt.isSuccess) { refetch(); refetchReputation(); }
+    if (receipt.isSuccess) {
+      void Promise.all([refetch(), refetchReputation()]);
+    }
   }, [receipt.isSuccess, refetch, refetchReputation]);
 
   const status = session?.status ?? 0;
   const isActive = status === 2;
+  const displayNow = isActive && settlementRequestedAt ? settlementRequestedAt : now;
   const elapsed = session?.startedAt
-    ? Math.max(0, (status === 3 ? Number(session.endedAt) : now) - Number(session.startedAt))
+    ? Math.max(0, (status === 3 ? Number(session.endedAt) : displayNow) - Number(session.startedAt))
     : 0;
   const accrued = session
     ? status === 3
@@ -77,14 +87,23 @@ export default function SessionPage() {
   const timeoutRemaining = session?.endedAt ? Math.max(0, Number(session.endedAt) + ATTESTATION_TIMEOUT - now) : ATTESTATION_TIMEOUT;
   const txBusy = isPending || receipt.isLoading;
 
+  useEffect(() => {
+    if (status !== 2 || receipt.isError) setSettlementRequestedAt(undefined);
+  }, [status, receipt.isError]);
+
   async function transact(nextAction: Action) {
+    setHash(undefined);
     setAction(nextAction);
     try {
       const txHash = nextAction === "deposit"
-        ? await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: "deposit", args: [sessionId], value: parseEther(depositAmount) })
-        : await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: nextAction === "start" ? "startSession" : nextAction === "end" ? "endSession" : "attestSession", args: [sessionId] });
+        ? await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: "deposit", args: [sessionId], value: parseEther(depositAmount), chainId: monadTestnet.id })
+        : await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: nextAction === "start" ? "startSession" : nextAction === "end" ? "endSession" : "attestSession", args: [sessionId], chainId: monadTestnet.id });
+      if (nextAction === "end") setSettlementRequestedAt(Math.floor(Date.now() / 1000));
       setHash(txHash);
-    } catch { /* Error is exposed by useWriteContract. */ }
+    } catch {
+      setSettlementRequestedAt(undefined);
+      /* Error is exposed by useWriteContract. */
+    }
   }
 
   if (!isContractConfigured) return <main className="shell grid min-h-[calc(100vh-74px)] place-items-center py-16"><div className="panel max-w-xl rounded-2xl p-8 text-center"><p className="eyebrow">Setup incomplete</p><h1 className="mt-4 text-3xl font-black">Deploy the contract first.</h1><p className="mt-4 text-mist">Set <code className="text-signal">NEXT_PUBLIC_CONTRACT_ADDRESS</code> and restart the app.</p></div></main>;
@@ -135,9 +154,10 @@ export default function SessionPage() {
                 </div>
               )}
               {session.proofIssued && <div className="rounded-xl border border-violet/35 bg-violet/[.07] p-4"><p className="flex items-center gap-2 font-semibold text-violet"><Seal/> Proof minted</p><p className="mt-2 text-sm leading-6 text-mist">Both learning and tutor reputation are recorded on-chain.</p></div>}
-              {txBusy && <p className="mt-4 text-sm text-mist">{isPending ? "Confirm in wallet…" : `Confirming ${action ?? "transaction"} on Monad…`}</p>}
+              {txBusy && <p className="mt-4 text-sm text-mist">{isPending ? (action === "end" ? "Confirm end in your wallet — the stream stays live until submitted." : "Confirm in wallet…") : action === "end" ? "Settlement submitted to Monad — timer paused while confirming…" : `Confirming ${action ?? "transaction"} on Monad…`}</p>}
               {errorSummary(error) && <p className="mt-4 text-sm text-coral">{errorSummary(error)}</p>}
-              {receipt.data && <a href={`${MONAD_EXPLORER}/tx/${receipt.data.transactionHash}`} target="_blank" rel="noreferrer" className="mt-4 block text-sm font-semibold text-signal hover:underline">View latest transaction ↗</a>}
+              {receipt.isError && <p className="mt-4 text-sm leading-6 text-coral">Monad did not confirm this transaction within 45 seconds. Check the transaction below; if the session is still live, you can safely retry.</p>}
+              {hash && <a href={`${MONAD_EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer" className="mt-4 block text-sm font-semibold text-signal hover:underline">View latest transaction ↗</a>}
             </div>
           )}
           <p className="mt-6 border-t border-line pt-5 text-xs leading-5 text-mist">The live counter previews on-chain accrual. Contract timestamps determine final payment, refund, duration, and proof.</p>
