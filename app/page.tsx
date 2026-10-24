@@ -13,7 +13,7 @@ export default function HomePage() {
             <p className="eyebrow mb-7">Pay for time · prove what you learned</p>
             <h1 className="max-w-3xl text-[clamp(3.5rem,8vw,7.2rem)] font-black leading-[.84] tracking-[-.075em]">Learn.<br/><span className="text-signal">Stream.</span> Prove.</h1>
             <p className="mt-8 max-w-xl text-lg leading-8 text-mist">Real-time tutoring payments that end with something portable: a verifiable skill proof for the student and on-chain reputation for the tutor.</p>
-            <div className="mt-9 flex flex-wrap gap-3"><Link href="/create" className="button-primary">Create a session <ArrowUpRight/></Link><a href="#sessions" className="button-secondary">Explore sessions</a></div>
+            <div className="mt-9 flex flex-wrap gap-3"><Link href="/create" className="button-primary">Create a session <ArrowUpRight/></Link><a href="#classes" className="button-secondary">Explore courses</a></div>
             <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-mist"><span className="flex items-center gap-2"><ShieldCheck/> Trustless escrow</span><span className="flex items-center gap-2"><Bolt/> Built for Monad speed</span></div>
           </div>
 
