@@ -1,14 +1,109 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yeni Projem</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <h1>Yeni Projem</h1>
-  <p>Bu site sıfırdan başlıyor.</p>
-  <script src="script.js"></script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ProofStream static UI preview for VS Code Live Server." />
+    <title>ProofStream — Static UI Demo</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="ProofStream home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 8h10M4 12h16M10 16h10" /></svg>
+          <i></i>
+        </span>
+        <span>ProofStream</span>
+      </a>
+      <div class="top-actions">
+        <span class="preview-tag">UI preview</span>
+        <button class="wallet-button" id="walletButton" type="button">Connect wallet</button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero grid-surface">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Pay for time · prove what you learned</p>
+            <h1>Learn.<br /><em>Stream.</em> Prove.</h1>
+            <p class="hero-lede">Real-time tutoring payments that end with something portable: a verifiable skill proof for the student and on-chain reputation for the tutor.</p>
+            <div class="hero-buttons">
+              <a class="button primary" href="#demo">Try the live demo <span>↗</span></a>
+              <a class="button secondary" href="#sessions">Explore sessions</a>
+            </div>
+            <div class="trust-row">
+              <span><b>✓</b> Trustless escrow</span>
+              <span><b>ϟ</b> Built for Monad speed</span>
+            </div>
+          </div>
+
+          <article class="stream-card" id="demo">
+            <div class="stream-head">
+              <div><span>Interactive UI demo</span><h2>Calculus · Derivatives</h2></div>
+              <strong id="liveState"><i></i> OPEN</strong>
+            </div>
+
+            <div class="clock-wrap">
+              <span>TIME ELAPSED</span>
+              <div class="clock" id="timer">00:00</div>
+              <p>0.5 MON per minute</p>
+            </div>
+
+            <div class="flow-track"><span id="flowProgress"></span></div>
+
+            <div class="money-grid">
+              <div><span>Tutor earned</span><strong class="signal" id="paidAmount">0.0000 MON</strong></div>
+              <div><span>Refundable</span><strong id="remainingAmount">0.0000 MON</strong></div>
+            </div>
+
+            <div class="attest-panel" id="attestPanel" hidden>
+              <div class="attest-title"><span class="seal">✓</span><div><small>PROOF STAGE</small><strong id="proofStatus">Waiting for attestations</strong></div></div>
+              <div class="attest-grid">
+                <button id="studentAttest" type="button">Student <b>Pending</b></button>
+                <button id="tutorAttest" type="button">Tutor <b>Pending</b></button>
+              </div>
+            </div>
+
+            <div class="demo-controls">
+              <button class="button primary full" id="actionButton" type="button">Deposit 2 MON</button>
+              <p id="demoHint">Demo mode — no wallet transaction will be sent.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="sessions">
+        <div class="section-head">
+          <div><p class="eyebrow">Live marketplace</p><h2>Open skill streams</h2></div>
+          <p>In the Web3 app, sessions and reputation are read directly from the ProofStream contract.</p>
+        </div>
+        <a class="session-row" href="#demo">
+          <div class="session-main"><span class="state"><i></i> OPEN</span><h3>Calculus · Derivatives</h3><p>0x71C4…A92F <b>✦ 12 proofs</b></p></div>
+          <div><span>RATE</span><strong>0.5 MON/min</strong></div>
+          <div><span>ESCROW</span><strong id="sessionEscrow">0 MON</strong></div>
+          <span class="arrow">↗</span>
+        </a>
+      </section>
+
+      <section class="steps-wrap">
+        <div class="steps">
+          <article><span>01</span><h3>Escrow the budget</h3><p>The student locks native MON in a session-specific smart contract escrow.</p></article>
+          <article><span>02</span><h3>Pay only for time</h3><p>On-chain timestamps calculate a pro-rata rate for every second of tutoring.</p></article>
+          <article><span>03</span><h3>Turn learning into proof</h3><p>Mutual attestation records the skill and increments portable tutor reputation.</p></article>
+        </div>
+      </section>
+
+      <section class="proof-section">
+        <div class="proof-copy"><p class="eyebrow">Crypto-native outcome</p><h2>A receipt proves payment. A ProofStream event proves progress.</h2><p>Every completed, attested session links student, tutor, subject, duration, and reputation in one lightweight on-chain record.</p></div>
+        <div class="certificate-wrap grid-surface"><article class="certificate" id="certificate"><div class="certificate-top"><span class="seal">✓</span><small>VERIFIED ON MONAD</small></div><p>SKILL PROOF #0042</p><h3>Calculus · Derivatives</h3><div><span>Duration <b id="proofDuration">28m 14s</b></span><span>Tutor rep <b class="signal" id="proofRep">+1</b></span></div></article></div>
+      </section>
+    </main>
+
+    <footer><span>Built for Monad Blitz · Payment, proof, and reputation on-chain.</span><a href="https://faucet.monad.xyz" target="_blank" rel="noreferrer">Get testnet MON ↗</a></footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="script.js"></script>
+  </body>
 </html>

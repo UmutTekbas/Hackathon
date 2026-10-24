@@ -69,6 +69,16 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Create a WalletConnect project ID and set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. A proper project ID is recommended for the demo even though injected wallets can work locally.
 
+### Open the interface with VS Code Go Live
+
+The repository root also contains a dependency-free static UI preview:
+
+1. Open this folder in VS Code.
+2. Install the **Live Server** extension if needed.
+3. Right-click `index.html` and choose **Open with Live Server**, or click **Go Live** in the status bar.
+
+The static preview simulates deposit, streaming, settlement, and mutual attestation in the browser so the complete interface can be presented without starting Node.js. It never sends wallet transactions. Use the Next.js application above for the real wagmi wallet flow and on-chain ProofStream contract calls.
+
 ## Compile and test
 
 ```bash
