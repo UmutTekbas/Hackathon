@@ -2,6 +2,7 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
+import { TokenPlans } from "./token-plans";
 
 export function Header() {
   return (
@@ -12,12 +13,13 @@ export function Header() {
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h10M4 12h16M10 16h10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
             <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-void bg-violet" />
           </span>
-          <span className="text-lg font-black tracking-[-.045em]">ProofStream</span>
+          <span className="hidden text-lg font-black tracking-[-.045em] min-[380px]:inline">ProofStream</span>
         </Link>
-        <nav className="flex items-center gap-3">
+        <nav className="flex items-center gap-2 sm:gap-3">
           <Link href="/#classes" className="hidden text-sm font-semibold text-mist hover:text-white md:block">Classes</Link>
           <Link href="/create" className="hidden text-sm font-semibold text-mist hover:text-white sm:block">Create session</Link>
           <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
+          <TokenPlans/>
         </nav>
       </div>
     </header>

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ProofStream static UI preview for VS Code Live Server." />
     <title>ProofStream — Static UI Demo</title>
-    <link rel="stylesheet" href="style.css?v=5" />
+    <link rel="stylesheet" href="style.css?v=6" />
   </head>
   <body>
     <header class="topbar">
@@ -14,11 +14,12 @@
           <svg viewBox="0 0 24 24"><path d="M4 8h10M4 12h16M10 16h10" /></svg>
           <i></i>
         </span>
-        <span>ProofStream</span>
+        <span class="brand-word">ProofStream</span>
       </a>
       <div class="top-actions">
         <span class="preview-tag">UI preview</span>
         <button class="wallet-button" id="walletButton" type="button">Connect wallet</button>
+        <button class="token-plan-button" id="tokenPlanButton" type="button" aria-label="Open demo token plans"><span>◈</span><b id="tokenPlanLabel">Token plans</b></button>
       </div>
     </header>
 
@@ -53,7 +54,7 @@
             <div class="clock-wrap">
               <span>TIME ELAPSED</span>
               <div class="clock" id="timer">00:00</div>
-              <p>0.2 MON per second</p>
+              <p id="demoRate">0.2 MON per second</p>
             </div>
 
             <div class="flow-track"><span id="flowProgress"></span></div>
@@ -120,7 +121,19 @@
 
     <footer><span>Built for Monad Blitz · Payment, proof, and reputation on-chain.</span><a href="https://faucet.monad.xyz" target="_blank" rel="noreferrer">Get testnet MON ↗</a></footer>
 
+    <div class="plan-modal" id="planModal" role="dialog" aria-modal="true" aria-labelledby="planModalTitle" hidden>
+      <div class="plan-dialog">
+        <div class="plan-modal-head"><div><p class="eyebrow">Visual demo credits</p><h2 id="planModalTitle">Choose your token plan.</h2><p>Demo only. No TL payment, wallet transaction, real MON, or token minting occurs.</p></div><button type="button" id="closePlanModal" aria-label="Close plans">×</button></div>
+        <div class="plan-grid">
+          <button type="button" class="plan-card" data-plan="starter" data-tokens="2500"><small>STARTER</small><strong>2,500 <i>TOK</i></strong><b>₺200</b><span>Short classes and focused practice</span><em>SELECT PLAN →</em></button>
+          <button type="button" class="plan-card" data-plan="plus" data-tokens="5000"><small>PLUS</small><strong>5,000 <i>TOK</i></strong><b>₺350</b><span>Best value for regular learners</span><em>SELECT PLAN →</em></button>
+          <button type="button" class="plan-card" data-plan="unlimited" data-tokens="unlimited"><small>UNLIMITED</small><strong>∞ <i>TOK</i></strong><b>₺1,000</b><span>Unlimited demo learning access</span><em>SELECT PLAN →</em></button>
+        </div>
+        <div class="settlement-picker"><small>TUTOR SETTLEMENT DEMO</small><div><button type="button" class="settlement-option active" data-mode="mon"><strong>MON settlement</strong><span>Credits unlock access; tutor earnings stay in MON.</span></button><button type="button" class="settlement-option" data-mode="studytoken"><strong>StudyToken settlement</strong><span>Tutor earnings use the selected STC demo balance.</span></button></div></div>
+        <div class="plan-summary"><span id="planSummary">No plan selected · Tutor paid in MON</span><button type="button" id="usePlanButton">Use demo selection</button></div>
+      </div>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="script.js?v=6"></script>
+    <script src="script.js?v=9"></script>
   </body>
 </html>

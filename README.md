@@ -109,6 +109,17 @@ The repository root also contains a dependency-free static UI preview:
 
 The static preview simulates deposit, streaming, settlement, and mutual attestation in the browser so the complete interface can be presented without starting Node.js. It never sends wallet transactions. Use the Next.js application above for the real wagmi wallet flow and on-chain ProofStream contract calls.
 
+### Visual token-plan demo
+
+The token-plan control next to **Connect wallet** is presentation-only. It offers `2,500 TOK / ₺200`, `5,000 TOK / ₺350`, and `Unlimited / ₺1,000`, and keeps the selected demo balance in the browser's local storage. It never charges TL, mints a token, or changes the smart contract.
+
+The same modal includes two visual settlement stories:
+
+- **MON settlement:** credits represent access rights while tutor earnings remain native MON.
+- **StudyToken settlement:** the interactive static demo displays tutor earnings and the remaining plan balance in STC.
+
+These modes exist only to compare product concepts during the pitch. Real on-chain session settlement remains native MON.
+
 ## Compile and test
 
 ```bash

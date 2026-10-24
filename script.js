@@ -1,4 +1,10 @@
 const walletButton = document.querySelector("#walletButton");
+const tokenPlanButton = document.querySelector("#tokenPlanButton");
+const tokenPlanLabel = document.querySelector("#tokenPlanLabel");
+const planModal = document.querySelector("#planModal");
+const closePlanModal = document.querySelector("#closePlanModal");
+const usePlanButton = document.querySelector("#usePlanButton");
+const planSummary = document.querySelector("#planSummary");
 const actionButton = document.querySelector("#actionButton");
 const topUpButton = document.querySelector("#topUpButton");
 const restartButton = document.querySelector("#restartButton");
@@ -21,9 +27,16 @@ const proofStatus = document.querySelector("#proofStatus");
 const certificate = document.querySelector("#certificate");
 const proofDuration = document.querySelector("#proofDuration");
 const toast = document.querySelector("#toast");
+const demoHint = document.querySelector("#demoHint");
+const demoRate = document.querySelector("#demoRate");
 
 const RATE_PER_SECOND = 0.2;
 const NET_DEPOSIT_PER_PLAN = 1.8;
+const demoPlans = {
+  starter: { tokens: 2500, label: "2,500" },
+  plus: { tokens: 5000, label: "5,000" },
+  unlimited: { tokens: Infinity, label: "∞" }
+};
 let phase = "open";
 let elapsed = 0;
 let escrow = 0;
@@ -32,6 +45,10 @@ let studentDone = false;
 let tutorDone = false;
 let selectedVideo = "xAcTmDO6NTI";
 let selectedPlaylist = "PLUl4u3cNGP62A-ynp6v6-LGBCzeH3VAQB";
+let selectedPlan = window.localStorage.getItem("proofstream-demo-plan");
+let settlementMode = window.localStorage.getItem("proofstream-demo-settlement") === "studytoken" ? "studytoken" : "mon";
+
+if (!demoPlans[selectedPlan]) selectedPlan = null;
 
 function formatTime(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -46,13 +63,46 @@ function showToast(message) {
   showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function paymentUnit() {
+  return settlementMode === "studytoken" ? "STC" : "MON";
+}
+
+function syncPlanUI() {
+  const plan = selectedPlan ? demoPlans[selectedPlan] : null;
+  tokenPlanLabel.textContent = plan ? `${plan.label} TOK` : "Token plans";
+  document.querySelectorAll(".plan-card").forEach((card) => {
+    const selected = card.dataset.plan === selectedPlan;
+    card.classList.toggle("selected", selected);
+    card.querySelector("em").textContent = selected ? "SELECTED ✓" : "SELECT PLAN →";
+  });
+  document.querySelectorAll(".settlement-option").forEach((option) => option.classList.toggle("active", option.dataset.mode === settlementMode));
+  planSummary.textContent = `${plan ? `${plan.label} tokens` : "No plan selected"} · ${settlementMode === "mon" ? "Tutor paid in MON" : "Tutor paid in StudyToken"}`;
+  demoHint.textContent = settlementMode === "mon"
+    ? "Demo mode · plan credits unlock access · tutor settlement stays in MON"
+    : `Demo mode · ${plan ? `${plan.label} STC balance` : "choose a token plan"} · tutor paid in StudyToken`;
+  demoRate.textContent = `0.2 ${paymentUnit()} per second`;
+  if (phase === "open") actionButton.textContent = settlementMode === "mon" ? "Deposit 2 MON" : plan ? "Use demo token plan" : "Choose a token plan";
+  renderMoney();
+}
+
+function openPlanPicker() {
+  planModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closePlanPicker() {
+  planModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
 function renderMoney() {
   const paid = Math.min(escrow, elapsed * RATE_PER_SECOND);
   const remaining = phase === "open" ? 0 : Math.max(0, escrow - paid);
+  const unit = paymentUnit();
   timerElement.textContent = formatTime(elapsed);
-  paidElement.textContent = `${paid.toFixed(4)} MON`;
-  remainingElement.textContent = `${remaining.toFixed(4)} MON`;
-  flowProgress.style.width = `${escrow ? Math.min(100, paid / escrow * 100) : 0}%`;
+  paidElement.textContent = `${paid.toFixed(4)} ${unit}`;
+  remainingElement.textContent = `${Number.isFinite(remaining) ? remaining.toFixed(4) : "∞"} ${unit}`;
+  flowProgress.style.width = `${escrow && Number.isFinite(escrow) ? Math.min(100, paid / escrow * 100) : 0}%`;
 }
 
 function showVideo() {
@@ -73,12 +123,13 @@ function hideVideo(title, copy) {
 function setPhase(nextPhase) {
   phase = nextPhase;
   if (phase === "funded") {
-    escrow = NET_DEPOSIT_PER_PLAN;
-    sessionEscrow.textContent = `${escrow.toFixed(1)} MON`;
-    remainingElement.textContent = `${escrow.toFixed(4)} MON`;
+    const plan = selectedPlan ? demoPlans[selectedPlan] : null;
+    escrow = settlementMode === "studytoken" && plan ? plan.tokens : NET_DEPOSIT_PER_PLAN;
+    sessionEscrow.textContent = `${Number.isFinite(escrow) ? escrow.toLocaleString() : "∞"} ${paymentUnit()}`;
+    remainingElement.textContent = `${Number.isFinite(escrow) ? escrow.toFixed(4) : "∞"} ${paymentUnit()}`;
     actionButton.textContent = "Start payment stream";
     liveState.innerHTML = "<i></i> FUNDED";
-    showToast("2 MON paid · 0.2 MON fee · 1.8 MON escrowed.");
+    showToast(settlementMode === "mon" ? "2 MON paid · 0.2 MON fee · 1.8 MON escrowed." : `${plan.label} StudyToken demo credits activated.`);
   }
   if (phase === "active") {
     window.clearInterval(intervalId);
@@ -92,7 +143,7 @@ function setPhase(nextPhase) {
     intervalId = window.setInterval(() => {
       elapsed += 1;
       renderMoney();
-      if (elapsed * RATE_PER_SECOND >= escrow) setPhase("exhausted");
+      if (Number.isFinite(escrow) && elapsed * RATE_PER_SECOND >= escrow) setPhase("exhausted");
     }, 1000);
     showToast("Payment stream started.");
   }
@@ -117,7 +168,7 @@ function setPhase(nextPhase) {
     attestPanel.hidden = false;
     liveState.innerHTML = "<i></i> SETTLED";
     hideVideo("Lesson ended", "The video is blank because the payment stream has stopped.");
-    showToast("Payment settled. Unused MON is refundable.");
+    showToast(`Payment settled. Unused ${paymentUnit()} is refundable.`);
   }
 }
 
@@ -132,7 +183,7 @@ function resetDemo() {
 
   actionButton.hidden = false;
   actionButton.disabled = false;
-  actionButton.textContent = "Deposit 2 MON";
+  actionButton.textContent = settlementMode === "mon" ? "Deposit 2 MON" : selectedPlan ? "Use demo token plan" : "Choose a token plan";
   actionButton.classList.add("primary");
   actionButton.classList.remove("danger");
   restartButton.hidden = true;
@@ -150,7 +201,7 @@ function resetDemo() {
   certificate.classList.remove("earned");
   proofDuration.textContent = "28m 14s";
   liveState.innerHTML = "<i></i> OPEN";
-  sessionEscrow.textContent = "0 MON";
+  sessionEscrow.textContent = `0 ${paymentUnit()}`;
   hideVideo("Pay as you learn", "The lecture starts when the payment stream starts.");
   renderMoney();
   document.querySelector("#demo").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -181,7 +232,8 @@ walletButton.addEventListener("click", () => {
 });
 
 actionButton.addEventListener("click", () => {
-  if (phase === "open") setPhase("funded");
+  if (phase === "open" && settlementMode === "studytoken" && !selectedPlan) openPlanPicker();
+  else if (phase === "open") setPhase("funded");
   else if (phase === "funded") setPhase("active");
   else if (phase === "active") {
     actionButton.disabled = true;
@@ -200,6 +252,32 @@ topUpButton.addEventListener("click", () => {
   showToast("Top-up confirmed · another 1.8 MON added to escrow.");
 });
 
+tokenPlanButton.addEventListener("click", openPlanPicker);
+closePlanModal.addEventListener("click", closePlanPicker);
+usePlanButton.addEventListener("click", closePlanPicker);
+planModal.addEventListener("click", (event) => { if (event.target === planModal) closePlanPicker(); });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !planModal.hidden) closePlanPicker(); });
+
+document.querySelectorAll(".plan-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    selectedPlan = card.dataset.plan;
+    window.localStorage.setItem("proofstream-demo-plan", selectedPlan);
+    if (phase !== "open") resetDemo();
+    syncPlanUI();
+    showToast(`${demoPlans[selectedPlan].label} demo tokens added.`);
+  });
+});
+
+document.querySelectorAll(".settlement-option").forEach((option) => {
+  option.addEventListener("click", () => {
+    settlementMode = option.dataset.mode;
+    window.localStorage.setItem("proofstream-demo-settlement", settlementMode);
+    if (phase !== "open") resetDemo();
+    syncPlanUI();
+    showToast(settlementMode === "mon" ? "Tutor settlement set to MON." : "Tutor settlement set to StudyToken demo credits.");
+  });
+});
+
 document.querySelectorAll(".class-card").forEach((card) => {
   card.addEventListener("click", () => {
     resetDemo();
@@ -212,4 +290,4 @@ document.querySelectorAll(".class-card").forEach((card) => {
   });
 });
 
-renderMoney();
+syncPlanUI();
