@@ -1,5 +1,6 @@
 const walletButton = document.querySelector("#walletButton");
 const actionButton = document.querySelector("#actionButton");
+const restartButton = document.querySelector("#restartButton");
 const timerElement = document.querySelector("#timer");
 const paidElement = document.querySelector("#paidAmount");
 const remainingElement = document.querySelector("#remainingAmount");
@@ -71,10 +72,44 @@ function setPhase(nextPhase) {
     renderMoney();
     actionButton.disabled = true;
     actionButton.hidden = true;
+    restartButton.hidden = false;
     attestPanel.hidden = false;
     liveState.innerHTML = "<i></i> SETTLED";
     showToast("Payment settled. Unused MON is refundable.");
   }
+}
+
+function resetDemo() {
+  window.clearInterval(intervalId);
+  intervalId = undefined;
+  phase = "open";
+  elapsed = 0;
+  studentDone = false;
+  tutorDone = false;
+
+  actionButton.hidden = false;
+  actionButton.disabled = false;
+  actionButton.textContent = "Deposit 2 MON";
+  actionButton.classList.add("primary");
+  actionButton.classList.remove("danger");
+  restartButton.hidden = true;
+  attestPanel.hidden = true;
+
+  studentAttest.disabled = false;
+  studentAttest.classList.remove("done");
+  studentAttest.querySelector("b").textContent = "Pending";
+  tutorAttest.disabled = false;
+  tutorAttest.classList.remove("done");
+  tutorAttest.querySelector("b").textContent = "Pending";
+  proofStatus.textContent = "Waiting for attestations";
+
+  certificate.classList.remove("earned");
+  proofDuration.textContent = "28m 14s";
+  liveState.innerHTML = "<i></i> OPEN";
+  sessionEscrow.textContent = "0 MON";
+  renderMoney();
+  document.querySelector("#demo").scrollIntoView({ behavior: "smooth", block: "center" });
+  showToast("New demo session ready.");
 }
 
 function attest(button, participant) {
@@ -112,5 +147,6 @@ actionButton.addEventListener("click", () => {
 
 studentAttest.addEventListener("click", () => attest(studentAttest, "student"));
 tutorAttest.addEventListener("click", () => attest(tutorAttest, "tutor"));
+restartButton.addEventListener("click", resetDemo);
 
 renderMoney();

@@ -72,6 +72,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--signal); outlin
 .money-grid strong { display: block; margin-top: 8px; font: 750 19px/1.2 ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .signal { color: var(--signal) !important; }
 .demo-controls { margin-top: 20px; }
+.restart-button { margin-top: 10px; }
 .demo-controls p { margin: 10px 0 0; color: #757b87; font-size: 11px; text-align: center; }
 .attest-panel { margin-top: 18px; padding: 15px; border: 1px solid rgba(165,139,255,.3); border-radius: 12px; background: rgba(165,139,255,.06); }
 .attest-title { display: flex; align-items: center; gap: 11px; color: var(--violet); }
