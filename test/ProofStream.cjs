@@ -28,7 +28,7 @@ describe("ProofStream", function () {
 
     expect(session.status).to.equal(3);
     expect(session.earnedAmount).to.equal(ethers.parseEther("0.75"));
-    expect(session.refundedAmount).to.equal(ethers.parseEther("1.25"));
+    expect(session.refundedAmount).to.equal(ethers.parseEther("1.05"));
     expect(await ethers.provider.getBalance(contract.target)).to.equal(0);
   });
 
@@ -67,7 +67,7 @@ describe("ProofStream", function () {
   it("rejects unauthorized lifecycle actions", async function () {
     const { contract, tutor, student, stranger } = await deployFixture();
     await contract.connect(tutor).createSession("Physics", ethers.parseEther("0.1"));
-    await contract.connect(student).deposit(0, { value: ethers.parseEther("1") });
+    await contract.connect(student).deposit(0, { value: ethers.parseEther("2") });
 
     await expect(contract.connect(stranger).startSession(0)).to.be.revertedWithCustomError(
       contract,
@@ -78,5 +78,44 @@ describe("ProofStream", function () {
       contract,
       "NotParticipant"
     );
+  });
+
+  it("takes a decreasing on-chain platform fee and escrows the net amount", async function () {
+    const { contract, tutor, student } = await deployFixture();
+    await contract.connect(tutor).createSession("MIT Python", ethers.parseEther("12"));
+    const treasuryBefore = await ethers.provider.getBalance(tutor.address);
+
+    await expect(contract.connect(student).deposit(0, { value: ethers.parseEther("5") }))
+      .to.emit(contract, "PlatformFeePaid")
+      .withArgs(0, student.address, ethers.parseEther("5"), ethers.parseEther("0.35"));
+
+    const session = await contract.getSession(0);
+    expect(session.depositedAmount).to.equal(ethers.parseEther("4.65"));
+    expect(await ethers.provider.getBalance(tutor.address) - treasuryBefore).to.equal(ethers.parseEther("0.35"));
+    expect(await contract.feeBpsFor(ethers.parseEther("2"))).to.equal(1_000);
+    expect(await contract.feeBpsFor(ethers.parseEther("20"))).to.equal(300);
+  });
+
+  it("allows the same student to top up an active stream", async function () {
+    const { contract, tutor, student } = await deployFixture();
+    await contract.connect(tutor).createSession("MIT Python", ethers.parseEther("12"));
+    await contract.connect(student).deposit(0, { value: ethers.parseEther("2") });
+    await contract.connect(student).startSession(0);
+    const started = (await contract.getSession(0)).startedAt;
+    await time.setNextBlockTimestamp(started + 30n);
+    await contract.connect(student).deposit(0, { value: ethers.parseEther("5") });
+    expect((await contract.getSession(0)).depositedAmount).to.equal(ethers.parseEther("6.45"));
+    const toppedUp = await contract.getSession(0);
+    expect(toppedUp.accruedAmount).to.equal(ethers.parseEther("1.8"));
+    await time.increaseTo(toppedUp.accrualStartedAt + 5n);
+    const [earned] = await contract.previewSettlement(0);
+    expect(earned).to.equal(ethers.parseEther("2.8"));
+  });
+
+  it("enforces the two MON minimum deposit", async function () {
+    const { contract, tutor, student } = await deployFixture();
+    await contract.connect(tutor).createSession("MIT Python", ethers.parseEther("12"));
+    await expect(contract.connect(student).deposit(0, { value: ethers.parseEther("1.99") }))
+      .to.be.revertedWithCustomError(contract, "DepositBelowMinimum");
   });
 });

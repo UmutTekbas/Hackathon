@@ -15,6 +15,7 @@ export function Header() {
           <span className="text-lg font-black tracking-[-.045em]">ProofStream</span>
         </Link>
         <nav className="flex items-center gap-3">
+          <Link href="/#classes" className="hidden text-sm font-semibold text-mist hover:text-white md:block">Classes</Link>
           <Link href="/create" className="hidden text-sm font-semibold text-mist hover:text-white sm:block">Create session</Link>
           <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
         </nav>

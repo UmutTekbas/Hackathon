@@ -15,6 +15,15 @@ export const proofStreamAbi = [
     inputs: [{ name: "sessionId", type: "uint256" }], outputs: []
   },
   {
+    type: "function", name: "quoteDeposit", stateMutability: "pure",
+    inputs: [{ name: "grossAmount", type: "uint256" }],
+    outputs: [{ name: "netDeposit", type: "uint256" }, { name: "feeAmount", type: "uint256" }]
+  },
+  {
+    type: "function", name: "MIN_DEPOSIT", stateMutability: "view",
+    inputs: [], outputs: [{ name: "", type: "uint256" }]
+  },
+  {
     type: "function", name: "startSession", stateMutability: "nonpayable",
     inputs: [{ name: "sessionId", type: "uint256" }], outputs: []
   },
@@ -52,6 +61,8 @@ export const proofStreamAbi = [
         { name: "endedAt", type: "uint256" },
         { name: "earnedAmount", type: "uint256" },
         { name: "refundedAmount", type: "uint256" },
+        { name: "accruedAmount", type: "uint256" },
+        { name: "accrualStartedAt", type: "uint256" },
         { name: "studentAttested", type: "bool" },
         { name: "tutorAttested", type: "bool" },
         { name: "proofIssued", type: "bool" },
@@ -76,6 +87,14 @@ export const proofStreamAbi = [
     ]
   },
   {
+    type: "event", name: "PlatformFeePaid", inputs: [
+      { name: "sessionId", type: "uint256", indexed: true },
+      { name: "student", type: "address", indexed: true },
+      { name: "grossAmount", type: "uint256", indexed: false },
+      { name: "feeAmount", type: "uint256", indexed: false }
+    ]
+  },
+  {
     type: "event", name: "SkillProofMinted", inputs: [
       { name: "student", type: "address", indexed: true },
       { name: "tutor", type: "address", indexed: true },
@@ -96,6 +115,8 @@ export type ProofSession = {
   endedAt: bigint;
   earnedAmount: bigint;
   refundedAmount: bigint;
+  accruedAmount: bigint;
+  accrualStartedAt: bigint;
   studentAttested: boolean;
   tutorAttested: boolean;
   proofIssued: boolean;

@@ -7,6 +7,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @notice Native MON escrow, time-based tutoring settlement, and lightweight skill attestations.
 contract ProofStream is ReentrancyGuard {
     uint256 public constant ATTESTATION_TIMEOUT = 5 minutes;
+    uint256 public constant MIN_DEPOSIT = 2 ether;
+    uint256 public constant BPS_DENOMINATOR = 10_000;
+    address payable public immutable platformTreasury;
 
     enum Status {
         Open,
@@ -25,6 +28,8 @@ contract ProofStream is ReentrancyGuard {
         uint256 endedAt;
         uint256 earnedAmount;
         uint256 refundedAmount;
+        uint256 accruedAmount;
+        uint256 accrualStartedAt;
         bool studentAttested;
         bool tutorAttested;
         bool proofIssued;
@@ -32,7 +37,7 @@ contract ProofStream is ReentrancyGuard {
     }
 
     uint256 public nextSessionId;
-    mapping(uint256 => Session) public sessions;
+    mapping(uint256 => Session) private _sessions;
     mapping(address => uint256) public tutorReputation;
 
     event SessionCreated(
@@ -42,6 +47,7 @@ contract ProofStream is ReentrancyGuard {
         uint256 pricePerMinute
     );
     event Deposited(uint256 indexed sessionId, address indexed student, uint256 amount, uint256 totalDeposit);
+    event PlatformFeePaid(uint256 indexed sessionId, address indexed student, uint256 grossAmount, uint256 feeAmount);
     event SessionStarted(uint256 indexed sessionId, uint256 startedAt);
     event SessionEnded(
         uint256 indexed sessionId,
@@ -62,6 +68,7 @@ contract ProofStream is ReentrancyGuard {
     error EmptyTitle();
     error InvalidPrice();
     error InvalidDeposit();
+    error DepositBelowMinimum();
     error InvalidStatus();
     error TutorCannotFundOwnSession();
     error NotSessionStudent();
@@ -70,12 +77,16 @@ contract ProofStream is ReentrancyGuard {
     error ProofAlreadyIssued();
     error TransferFailed();
 
+    constructor() {
+        platformTreasury = payable(msg.sender);
+    }
+
     function createSession(string memory title, uint256 pricePerMinute) external returns (uint256 sessionId) {
         if (bytes(title).length == 0) revert EmptyTitle();
         if (pricePerMinute == 0) revert InvalidPrice();
 
         sessionId = nextSessionId++;
-        Session storage session = sessions[sessionId];
+        Session storage session = _sessions[sessionId];
         session.tutor = payable(msg.sender);
         session.title = title;
         session.pricePerMinute = pricePerMinute;
@@ -83,10 +94,13 @@ contract ProofStream is ReentrancyGuard {
         emit SessionCreated(sessionId, msg.sender, title, pricePerMinute);
     }
 
-    function deposit(uint256 sessionId) external payable {
+    function deposit(uint256 sessionId) external payable nonReentrant {
         Session storage session = _getSession(sessionId);
-        if (session.status != Status.Open && session.status != Status.Funded) revert InvalidStatus();
+        if (session.status != Status.Open && session.status != Status.Funded && session.status != Status.Active) {
+            revert InvalidStatus();
+        }
         if (msg.value == 0) revert InvalidDeposit();
+        if (msg.value < MIN_DEPOSIT) revert DepositBelowMinimum();
         if (msg.sender == session.tutor) revert TutorCannotFundOwnSession();
 
         if (session.student == address(0)) {
@@ -95,9 +109,34 @@ contract ProofStream is ReentrancyGuard {
             revert NotSessionStudent();
         }
 
-        session.depositedAmount += msg.value;
-        session.status = Status.Funded;
-        emit Deposited(sessionId, msg.sender, msg.value, session.depositedAmount);
+        if (session.status == Status.Active) {
+            session.accruedAmount = _currentEarned(session);
+            session.accrualStartedAt = block.timestamp;
+        }
+
+        (uint256 netDeposit, uint256 feeAmount) = quoteDeposit(msg.value);
+        session.depositedAmount += netDeposit;
+        if (session.status == Status.Open) session.status = Status.Funded;
+
+        (bool feePaid, ) = platformTreasury.call{value: feeAmount}("");
+        if (!feePaid) revert TransferFailed();
+
+        emit PlatformFeePaid(sessionId, msg.sender, msg.value, feeAmount);
+        emit Deposited(sessionId, msg.sender, netDeposit, session.depositedAmount);
+    }
+
+    /// @notice Higher deposits pay a lower platform commission. Returned deposit is the net escrow.
+    function quoteDeposit(uint256 grossAmount) public pure returns (uint256 netDeposit, uint256 feeAmount) {
+        uint256 feeBps = feeBpsFor(grossAmount);
+        feeAmount = (grossAmount * feeBps) / BPS_DENOMINATOR;
+        netDeposit = grossAmount - feeAmount;
+    }
+
+    function feeBpsFor(uint256 grossAmount) public pure returns (uint256) {
+        if (grossAmount >= 20 ether) return 300;
+        if (grossAmount >= 10 ether) return 500;
+        if (grossAmount >= 5 ether) return 700;
+        return 1_000;
     }
 
     function startSession(uint256 sessionId) external {
@@ -106,6 +145,7 @@ contract ProofStream is ReentrancyGuard {
         if (msg.sender != session.student) revert NotSessionStudent();
 
         session.startedAt = block.timestamp;
+        session.accrualStartedAt = block.timestamp;
         session.status = Status.Active;
         emit SessionStarted(sessionId, block.timestamp);
     }
@@ -115,8 +155,7 @@ contract ProofStream is ReentrancyGuard {
         if (session.status != Status.Active) revert InvalidStatus();
         if (msg.sender != session.student && msg.sender != session.tutor) revert NotParticipant();
 
-        uint256 earned = ((block.timestamp - session.startedAt) * session.pricePerMinute) / 60;
-        if (earned > session.depositedAmount) earned = session.depositedAmount;
+        uint256 earned = _currentEarned(session);
         uint256 refund = session.depositedAmount - earned;
 
         session.endedAt = block.timestamp;
@@ -176,9 +215,16 @@ contract ProofStream is ReentrancyGuard {
         if (session.status == Status.Ended) return (session.earnedAmount, session.refundedAmount);
         if (session.status != Status.Active) return (0, session.depositedAmount);
 
-        earned = ((block.timestamp - session.startedAt) * session.pricePerMinute) / 60;
-        if (earned > session.depositedAmount) earned = session.depositedAmount;
+        earned = _currentEarned(session);
         refund = session.depositedAmount - earned;
+    }
+
+    function _currentEarned(Session storage session) internal view returns (uint256 earned) {
+        earned = session.accruedAmount;
+        if (session.accrualStartedAt != 0) {
+            earned += ((block.timestamp - session.accrualStartedAt) * session.pricePerMinute) / 60;
+        }
+        if (earned > session.depositedAmount) earned = session.depositedAmount;
     }
 
     function _issueProof(uint256 sessionId, Session storage session) internal {
@@ -189,12 +235,12 @@ contract ProofStream is ReentrancyGuard {
             session.tutor,
             sessionId,
             session.title,
-            session.endedAt - session.startedAt
+            (session.earnedAmount * 60) / session.pricePerMinute
         );
     }
 
     function _getSession(uint256 sessionId) internal view returns (Session storage session) {
         if (sessionId >= nextSessionId) revert SessionNotFound();
-        session = sessions[sessionId];
+        session = _sessions[sessionId];
     }
 }

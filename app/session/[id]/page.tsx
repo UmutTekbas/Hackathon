@@ -1,13 +1,15 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { formatEther, parseEther, zeroAddress, type Hash } from "viem";
+import { formatEther, zeroAddress, type Hash } from "viem";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { Seal } from "@/components/icons";
 import { monadTestnet, MONAD_EXPLORER } from "@/lib/chain";
 import { isContractConfigured, proofStreamAbi, proofStreamAddress, statusLabel, type ProofSession } from "@/lib/contract";
+import { findCourseBySessionTitle, youtubeEmbedUrl } from "@/lib/courses";
 
 const ATTESTATION_TIMEOUT = 300;
 
@@ -26,14 +28,13 @@ function errorSummary(error: Error | null) {
   return firstLine.length > 180 ? `${firstLine.slice(0, 180)}…` : firstLine;
 }
 
-type Action = "deposit" | "start" | "end" | "attest";
+type Action = "start" | "end" | "attest";
 
 export default function SessionPage() {
   const params = useParams<{ id: string }>();
   const sessionId = useMemo(() => { try { return BigInt(params.id); } catch { return 0n; } }, [params.id]);
   const { address, isConnected } = useAccount();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
-  const [depositAmount, setDepositAmount] = useState("2");
   const [hash, setHash] = useState<Hash>();
   const [action, setAction] = useState<Action>();
   const [settlementRequestedAt, setSettlementRequestedAt] = useState<number>();
@@ -68,17 +69,15 @@ export default function SessionPage() {
 
   const status = session?.status ?? 0;
   const isActive = status === 2;
-  const displayNow = isActive && settlementRequestedAt ? settlementRequestedAt : now;
-  const elapsed = session?.startedAt
-    ? Math.max(0, (status === 3 ? Number(session.endedAt) : displayNow) - Number(session.startedAt))
-    : 0;
+  const accrualNow = isActive && settlementRequestedAt ? settlementRequestedAt : now;
   const accrued = session
     ? status === 3
       ? session.earnedAmount
       : isActive
-        ? [BigInt(elapsed) * session.pricePerMinute / 60n, session.depositedAmount].reduce((a, b) => a < b ? a : b)
+        ? [session.accruedAmount + BigInt(Math.max(0, accrualNow - Number(session.accrualStartedAt))) * session.pricePerMinute / 60n, session.depositedAmount].reduce((a, b) => a < b ? a : b)
         : 0n
     : 0n;
+  const elapsed = session && session.pricePerMinute > 0n ? Number((accrued * 60n) / session.pricePerMinute) : 0;
   const remaining = session ? (status === 3 ? session.refundedAmount : session.depositedAmount - accrued) : 0n;
   const progress = session && session.depositedAmount > 0n ? Math.min(100, Number((accrued * 10_000n) / session.depositedAmount) / 100) : 0;
   const isStudent = Boolean(address && session && address.toLowerCase() === session.student.toLowerCase());
@@ -86,6 +85,11 @@ export default function SessionPage() {
   const hasAttested = Boolean(session && ((isStudent && session.studentAttested) || (isTutor && session.tutorAttested)));
   const timeoutRemaining = session?.endedAt ? Math.max(0, Number(session.endedAt) + ATTESTATION_TIMEOUT - now) : ATTESTATION_TIMEOUT;
   const txBusy = isPending || receipt.isLoading;
+  const course = findCourseBySessionTitle(session?.title);
+  const isOutOfFunds = Boolean(isActive && session && remaining === 0n);
+  const videoIsUnlocked = Boolean(course && isActive && !isOutOfFunds);
+  const pricePerSecond = session ? session.pricePerMinute / 60n : 0n;
+  const displayedElapsed = elapsed;
 
   useEffect(() => {
     if (status !== 2 || receipt.isError) setSettlementRequestedAt(undefined);
@@ -95,9 +99,7 @@ export default function SessionPage() {
     setHash(undefined);
     setAction(nextAction);
     try {
-      const txHash = nextAction === "deposit"
-        ? await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: "deposit", args: [sessionId], value: parseEther(depositAmount), chainId: monadTestnet.id })
-        : await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: nextAction === "start" ? "startSession" : nextAction === "end" ? "endSession" : "attestSession", args: [sessionId], chainId: monadTestnet.id });
+      const txHash = await writeContractAsync({ address: proofStreamAddress, abi: proofStreamAbi, functionName: nextAction === "start" ? "startSession" : nextAction === "end" ? "endSession" : "attestSession", args: [sessionId], chainId: monadTestnet.id });
       if (nextAction === "end") setSettlementRequestedAt(Math.floor(Date.now() / 1000));
       setHash(txHash);
     } catch {
@@ -127,21 +129,24 @@ export default function SessionPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
         <section className="panel overflow-hidden rounded-2xl">
-          <div className="grid-lines px-5 py-12 text-center sm:px-10 sm:py-16"><p className="font-mono text-[11px] uppercase tracking-[.18em] text-mist">Time elapsed</p><p className="mt-5 font-mono text-[clamp(4.2rem,13vw,8rem)] font-bold leading-none tracking-[-.08em] number-tabular">{formatClock(elapsed)}</p><div className="mx-auto mt-7 flex w-fit items-center gap-2 text-sm text-mist">{isActive ? <><span className="status-dot"/> Streaming {formatMon(session.pricePerMinute, 3)} MON/min</> : status === 3 ? "Payment settled · proof stage open" : "Timer starts after the student confirms"}</div></div>
+          <div className="relative aspect-video border-b border-line bg-black">
+            {videoIsUnlocked && course ? <iframe key={`${course.slug}-${session.startedAt}`} className="absolute inset-0 h-full w-full" src={youtubeEmbedUrl(course)} title={`${course.title} lecture`} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen/> : <div className="grid h-full place-items-center p-8 text-center"><div><span className={`mx-auto grid h-14 w-14 place-items-center rounded-full border ${isOutOfFunds ? "border-coral/50 text-coral" : "border-line text-mist"}`}>{isOutOfFunds ? "!" : "▶"}</span><p className="mt-5 font-semibold">{isOutOfFunds ? "Stream paused — out of tokens" : status === 3 ? "Lesson ended" : "Pay as you learn"}</p><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-mist">{isOutOfFunds ? "The lecture is hidden because the escrow is empty. Add MON to continue, or end the session." : isActive ? "No course video is linked to this custom session." : "The lecture stays blank until the student starts the on-chain payment stream."}</p>{isOutOfFunds && isStudent && <Link href={`/deposit/${sessionId}`} className="button-primary mt-5">Deposit more MON</Link>}</div></div>}
+          </div>
+          <div className="grid-lines px-5 py-12 text-center sm:px-10 sm:py-16"><p className="font-mono text-[11px] uppercase tracking-[.18em] text-mist">Paid learning time</p><p className="mt-5 font-mono text-[clamp(4.2rem,13vw,8rem)] font-bold leading-none tracking-[-.08em] number-tabular">{formatClock(displayedElapsed)}</p><div className="mx-auto mt-7 flex w-fit items-center gap-2 text-sm text-mist">{isOutOfFunds ? <><span className="h-2 w-2 rounded-full bg-coral"/> Paused · escrow empty</> : isActive ? <><span className="status-dot"/> Streaming {formatMon(pricePerSecond, 3)} MON/sec</> : status === 3 ? "Payment settled · proof stage open" : "Timer starts after the student confirms"}</div></div>
           <div className="border-t border-line p-5 sm:p-8"><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-line bg-void p-5"><p className="text-xs uppercase tracking-[.12em] text-mist">Paid to tutor</p><p className="mt-3 font-mono text-3xl font-bold text-signal number-tabular">{formatMon(accrued)} <span className="text-sm">MON</span></p></div><div className="rounded-xl border border-line bg-void p-5"><p className="text-xs uppercase tracking-[.12em] text-mist">Student balance</p><p className="mt-3 font-mono text-3xl font-bold number-tabular">{formatMon(remaining)} <span className="text-sm">MON</span></p></div></div><div className="mt-6"><div className="mb-2 flex justify-between text-xs text-mist"><span>Accrued</span><span>{progress.toFixed(2)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-[#292e38]"><div className="h-full bg-signal transition-[width] duration-500" style={{ width: `${progress}%` }}/></div></div></div>
         </section>
 
         <aside className="panel h-fit rounded-2xl p-6">
           <p className="eyebrow">Session controls</p>
-          <dl className="mt-6 space-y-4 border-b border-line pb-6 text-sm"><div className="flex justify-between gap-4"><dt className="text-mist">Rate</dt><dd className="font-mono">{formatMon(session.pricePerMinute, 3)} MON/min</dd></div><div className="flex justify-between gap-4"><dt className="text-mist">Escrow</dt><dd className="font-mono">{formatMon(session.depositedAmount, 3)} MON</dd></div><div className="flex justify-between gap-4"><dt className="text-mist">Student</dt><dd className="font-mono">{session.student === zeroAddress ? "Not funded" : shortAddress(session.student)}</dd></div></dl>
+          <dl className="mt-6 space-y-4 border-b border-line pb-6 text-sm"><div className="flex justify-between gap-4"><dt className="text-mist">Rate</dt><dd className="font-mono text-signal">{formatMon(pricePerSecond, 3)} MON/sec</dd></div><div className="flex justify-between gap-4"><dt className="text-mist">Escrow</dt><dd className="font-mono">{formatMon(session.depositedAmount, 3)} MON</dd></div><div className="flex justify-between gap-4"><dt className="text-mist">Student</dt><dd className="font-mono">{session.student === zeroAddress ? "Not funded" : shortAddress(session.student)}</dd></div></dl>
 
           {!isConnected ? <div className="mt-6"><p className="mb-4 text-sm leading-6 text-mist">Connect a wallet to fund or control this session.</p><ConnectButton/></div> : (
             <div className="mt-6">
-              {status === 0 && !isTutor && <><label className="mb-2 block text-sm font-semibold">Deposit amount</label><div className="relative"><input className="field pr-20 font-mono" type="number" min="0.000001" step="0.000001" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)}/><span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-signal">MON</span></div><button className="button-primary mt-4 w-full" disabled={txBusy || Number(depositAmount) <= 0} onClick={() => transact("deposit")}>Deposit into escrow</button></>}
+              {status === 0 && !isTutor && <><p className="mb-4 text-sm leading-6 text-mist">Choose an on-chain deposit plan. Minimum 2 MON; larger plans pay a lower platform fee.</p><Link href={`/deposit/${sessionId}`} className="button-primary w-full">Choose deposit plan</Link></>}
               {status === 0 && isTutor && <p className="text-sm leading-6 text-mist">Share this page with a student. Tutors cannot fund their own offer.</p>}
               {status === 1 && isStudent && <button className="button-primary w-full" disabled={txBusy} onClick={() => transact("start")}>Start payment stream</button>}
               {status === 1 && !isStudent && <p className="text-sm leading-6 text-mist">Waiting for the student to start the stream.</p>}
-              {status === 2 && (isStudent || isTutor) && <button className="button-danger w-full" disabled={txBusy} onClick={() => transact("end")}>End & settle now</button>}
+              {status === 2 && (isStudent || isTutor) && <div className="grid gap-3"><button className="button-danger w-full" disabled={txBusy} onClick={() => transact("end")}>End & settle now</button>{isStudent && <Link href={`/deposit/${sessionId}`} className="button-secondary w-full">Add stream balance</Link>}</div>}
               {status === 2 && !isStudent && !isTutor && <p className="text-sm leading-6 text-mist">This stream is live. Only its tutor or student can end it.</p>}
 
               {status === 3 && !session.proofIssued && (

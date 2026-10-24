@@ -27,6 +27,10 @@ All payment, timing, attestation, proof, and reputation logic lives in `ProofStr
 - Two attestations immediately emit `SkillProofMinted` and increment reputation.
 - If only one participant attests, that participant can finalize after the five-minute timeout.
 - Home screen lists recent open sessions and current tutor proof counts directly from contract state.
+- Students browse a four-category MIT class catalog and choose an available tutor stream.
+- The linked YouTube lecture mounts and autoplays only while the on-chain stream has spendable escrow.
+- An empty escrow pauses and blanks the player; the student can top up the active session on-chain.
+- Deposits use transparent, decreasing platform fees with a two MON minimum.
 
 The rate is specified per minute and accrued pro-rata by the second:
 
@@ -34,6 +38,30 @@ The rate is specified per minute and accrued pro-rata by the second:
 earned = min(deposit, elapsedSeconds × pricePerMinute ÷ 60)
 refund = deposit − earned
 ```
+
+Catalog offers default to `0.2 MON/second`, stored by the contract as `12 MON/minute` and accrued pro-rata every second.
+
+## Course catalog
+
+| Category | Course |
+| --- | --- |
+| Programming & Computer Science | MIT 6.100L Introduction to CS and Programming using Python |
+| Finance & Economics | MIT 14.01 Principles of Microeconomics |
+| Biology & Life Sciences | MIT Introductory Biology |
+| Neuroscience | MIT 9.13 The Human Brain |
+
+The catalog and video identifiers are public frontend metadata in `lib/courses.ts`. Session creation, student identity, escrow, timing, payout, refund, fees, proof, and reputation remain on-chain.
+
+### On-chain deposit plans
+
+| Gross deposit | Platform fee | Net session escrow |
+| ---: | ---: | ---: |
+| 2 MON | 10% | 1.8 MON |
+| 5 MON | 7% | 4.65 MON |
+| 10 MON | 5% | 9.5 MON |
+| 20 MON | 3% | 19.4 MON |
+
+The contract transfers the fee to `platformTreasury` during the deposit transaction. The same student may top up a funded or active stream. Larger payments receive the lower fee automatically from the contract; the UI does not control fee calculation.
 
 ## Stack
 
@@ -47,6 +75,8 @@ refund = deposit − earned
 ```text
 app/                         Next.js routes
   create/                    Tutor offer creation
+  course/[slug]/             Course details + matching tutor streams
+  deposit/[id]/              On-chain plan selection and active top-up
   session/[id]/              Live payment + attestation experience
 components/                  Navigation and on-chain session feed
 contracts/ProofStream.sol    Escrow, settlement, proof, reputation
@@ -95,6 +125,9 @@ The tests cover:
 - Reputation increment exactly once
 - One-sided proof finalization after timeout
 - Unauthorized start/end rejection
+- Minimum deposit enforcement
+- Decreasing commission tiers and treasury payment
+- Active stream top-ups by the original student
 
 ## Deploy to Monad Testnet
 
@@ -110,6 +143,8 @@ Never commit this key. Fund the deployer with testnet MON from the [Monad faucet
 ```bash
 pnpm contract:deploy
 ```
+
+The course/top-up release changes the session struct and deposit accounting. Deploy a fresh contract for this version; an address from the earlier MVP is not ABI-compatible.
 
 Copy the printed address into `.env.local`:
 
@@ -134,10 +169,10 @@ Restart Next.js after changing `NEXT_PUBLIC_*` values.
 
 ## 60-second demo script
 
-1. **Tutor wallet:** create `Calculus · Derivatives` at `0.5 MON/min` and copy the session URL.
-2. **Student wallet:** open the URL and deposit `2 MON`.
-3. **Student:** click **Start payment stream**. Show the live timer and both balances moving.
-4. Wait 30–60 seconds, then click **End & settle now** from either participant.
+1. **Tutor wallet:** choose `MIT 6.100L Introduction to CS and Programming using Python`, keep the `0.2 MON/sec` demo rate, and create the offer.
+2. **Student wallet:** open the course, choose the tutor, and deposit the `2 MON` Starter plan (`1.8 MON` net escrow).
+3. **Student:** click **Start payment stream**. Show the MIT lecture appear while the live timer and both balances move.
+4. Let the short starter balance run out to show the player pause, then use **Deposit more MON** to resume. End from either participant when ready.
 5. Show the settled tutor payment and student refund in Monadscan.
 6. **Student wallet:** click **Attest this session**.
 7. **Tutor wallet:** connect and attest. The UI switches to **Skill proof recorded**, and tutor reputation increases by one.

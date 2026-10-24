@@ -3,10 +3,11 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { decodeEventLog, parseEther, type Hash } from "viem";
+import { decodeEventLog, parseUnits, type Hash } from "viem";
 import { useAccount, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { ArrowUpRight } from "@/components/icons";
 import { isContractConfigured, proofStreamAbi, proofStreamAddress } from "@/lib/contract";
+import { courses, getCourse, STREAM_RATE_PER_SECOND } from "@/lib/courses";
 
 function friendlyError(error: Error | null) {
   if (!error) return null;
@@ -17,13 +18,26 @@ function friendlyError(error: Error | null) {
 
 export default function CreateSessionPage() {
   const { isConnected } = useAccount();
+  const [courseSlug, setCourseSlug] = useState("");
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
-  const [rate, setRate] = useState("0.5");
+  const [rate, setRate] = useState(STREAM_RATE_PER_SECOND);
   const [hash, setHash] = useState<Hash>();
   const [sessionId, setSessionId] = useState<bigint>();
   const { writeContractAsync, isPending, error } = useWriteContract();
   const receipt = useWaitForTransactionReceipt({ hash });
+  const selectedCourse = getCourse(courseSlug);
+
+  useEffect(() => {
+    setCourseSlug(new URLSearchParams(window.location.search).get("course") ?? "");
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCourse) return;
+    setTitle(selectedCourse.title);
+    setSubject(selectedCourse.shortCategory);
+    setRate(STREAM_RATE_PER_SECOND);
+  }, [selectedCourse]);
 
   useEffect(() => {
     if (!receipt.data) return;
@@ -41,17 +55,18 @@ export default function CreateSessionPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!title.trim() || !subject.trim() || Number(rate) <= 0) return;
+    const pricePerMinute = parseUnits(rate, 18) * 60n;
     const txHash = await writeContractAsync({
       address: proofStreamAddress,
       abi: proofStreamAbi,
       functionName: "createSession",
-      args: [`${title.trim()} · ${subject.trim()}`, parseEther(rate)]
+      args: [selectedCourse?.title ?? `${title.trim()} · ${subject.trim()}`, pricePerMinute]
     });
     setHash(txHash);
   }
 
   if (sessionId !== undefined) {
-    const path = `/session/${sessionId}`;
+    const path = `/session/${sessionId}${selectedCourse ? `?course=${selectedCourse.slug}` : ""}`;
     return (
       <main className="shell grid min-h-[calc(100vh-74px)] place-items-center py-16">
         <section className="panel w-full max-w-2xl rounded-2xl p-7 sm:p-10">
@@ -81,11 +96,12 @@ export default function CreateSessionPage() {
         ) : (
           <form onSubmit={submit}>
             <div className="grid gap-6">
-              <label><span className="mb-2 block text-sm font-semibold">Session title</span><input className="field" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Calculus masterclass" maxLength={80} required/></label>
-              <label><span className="mb-2 block text-sm font-semibold">Skill / subject</span><input className="field" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Derivatives & integrals" maxLength={80} required/></label>
-              <label><span className="mb-2 block text-sm font-semibold">Price per minute</span><div className="relative"><input className="field pr-20 font-mono" type="number" value={rate} onChange={(event) => setRate(event.target.value)} min="0.000001" step="0.000001" required/><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-signal">MON</span></div></label>
+              <label><span className="mb-2 block text-sm font-semibold">Course catalog</span><select className="field" value={courseSlug} onChange={(event) => setCourseSlug(event.target.value)}><option value="">Custom tutoring session</option>{courses.map((course) => <option key={course.slug} value={course.slug}>{course.shortCategory} — {course.title}</option>)}</select></label>
+              <label><span className="mb-2 block text-sm font-semibold">Session title</span><input className="field" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Calculus masterclass" maxLength={120} required readOnly={Boolean(selectedCourse)}/></label>
+              <label><span className="mb-2 block text-sm font-semibold">Skill / subject</span><input className="field" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Derivatives & integrals" maxLength={80} required readOnly={Boolean(selectedCourse)}/></label>
+              <label><span className="mb-2 block text-sm font-semibold">Price per second</span><div className="relative"><input className="field pr-20 font-mono" type="number" value={rate} onChange={(event) => setRate(event.target.value)} min="0.000001" step="0.000001" required/><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-signal">MON</span></div></label>
             </div>
-            <div className="mt-7 rounded-xl border border-line bg-void p-5"><div className="flex items-center justify-between gap-3"><p className="text-xs uppercase tracking-wider text-mist">On-chain offer preview</p><span className="font-mono text-xs text-violet">REP +1 after proof</span></div><div className="mt-4 flex items-end justify-between gap-4"><p className="font-semibold">{title || "Your session"}{subject ? ` · ${subject}` : ""}</p><p className="shrink-0 font-mono text-signal">{rate || "0"} / min</p></div></div>
+            <div className="mt-7 rounded-xl border border-line bg-void p-5"><div className="flex items-center justify-between gap-3"><p className="text-xs uppercase tracking-wider text-mist">On-chain offer preview</p><span className="font-mono text-xs text-violet">REP +1 after proof</span></div><div className="mt-4 flex items-end justify-between gap-4"><p className="font-semibold">{selectedCourse?.title ?? `${title || "Your session"}${subject ? ` · ${subject}` : ""}`}</p><p className="shrink-0 font-mono text-signal">{rate || "0"} / sec</p></div></div>
             <button className="button-primary mt-7 w-full" disabled={!isContractConfigured || isPending || receipt.isLoading}>{isPending ? "Confirm in wallet…" : receipt.isLoading ? "Confirming on Monad…" : "Create on-chain session"}</button>
             {friendlyError(error) && <p className="mt-4 text-sm text-coral">{friendlyError(error)}</p>}
           </form>
