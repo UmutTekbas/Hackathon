@@ -246,10 +246,8 @@ studentAttest.addEventListener("click", () => attest(studentAttest, "student"));
 tutorAttest.addEventListener("click", () => attest(tutorAttest, "tutor"));
 restartButton.addEventListener("click", resetDemo);
 topUpButton.addEventListener("click", () => {
-  escrow += NET_DEPOSIT_PER_PLAN;
-  sessionEscrow.textContent = `${escrow.toFixed(1)} MON`;
-  setPhase("active");
-  showToast("Top-up confirmed · another 1.8 MON added to escrow.");
+  openPlanPicker();
+  showToast("Choose a demo token plan to continue.");
 });
 
 tokenPlanButton.addEventListener("click", openPlanPicker);

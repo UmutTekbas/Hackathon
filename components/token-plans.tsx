@@ -34,6 +34,12 @@ export function TokenPlans() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [open]);
 
+  useEffect(() => {
+    const openPlans = () => setOpen(true);
+    window.addEventListener("proofstream-open-token-plans", openPlans);
+    return () => window.removeEventListener("proofstream-open-token-plans", openPlans);
+  }, []);
+
   function selectPlan(nextPlan: PlanId) {
     setPlanId(nextPlan);
     window.localStorage.setItem(PLAN_KEY, nextPlan);
